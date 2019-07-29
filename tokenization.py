@@ -24,6 +24,7 @@ import unicodedata
 import six
 import tensorflow as tf
 
+retain = ['<e1>', '<e2>', '</e1>', '</e2>']
 
 def validate_case_matches_checkpoint(do_lower_case, init_checkpoint):
   """Checks whether the casing config is consistent with the checkpoint name."""
@@ -207,14 +208,19 @@ class BasicTokenizer(object):
     text = self._tokenize_chinese_chars(text)
 
     orig_tokens = whitespace_tokenize(text)
+
     split_tokens = []
     for token in orig_tokens:
+      if token in retain:
+        split_tokens.append(token)
+        continue
       if self.do_lower_case:
         token = token.lower()
         token = self._run_strip_accents(token)
       split_tokens.extend(self._run_split_on_punc(token))
 
     output_tokens = whitespace_tokenize(" ".join(split_tokens))
+
     return output_tokens
 
   def _run_strip_accents(self, text):
@@ -327,6 +333,9 @@ class WordpieceTokenizer(object):
 
     output_tokens = []
     for token in whitespace_tokenize(text):
+      if token in retain:
+        output_tokens.append(token)
+        continue
       chars = list(token)
       if len(chars) > self.max_input_chars_per_word:
         output_tokens.append(self.unk_token)
