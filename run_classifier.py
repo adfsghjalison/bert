@@ -27,13 +27,19 @@ import optimization
 import tokenization
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 
+"""
 cf = tf.ConfigProto()
 cf.gpu_options.allow_growth=True
 #cf.gpu_options.per_process_gpu_memory_fraction = 0.4
 session = tf.Session(config=cf)
+"""
 
 retain = ['<e1>', '<e2>', '</e1>', '</e2>']
+sep_replace = {'<e1>' : ['$', '$', '$'], '</e1>' : ['$', '$', '%'], \
+              '<e2>' : ['$', '#', '#'], '</e2>' : ['$', '#', '&']}
+
 
 flags = tf.flags
 
@@ -61,9 +67,9 @@ flags.DEFINE_string(
 
 ## Other parameters
 
-flags.DEFINE_string(
-    "separate", 'sep',
-    "no / sep")
+flags.DEFINE_integer(
+    "entity_sep", 0,
+    "0 / 1 / 2")
 
 flags.DEFINE_string(
     "init_checkpoint", None,
@@ -96,7 +102,7 @@ flags.DEFINE_integer("predict_batch_size", 8, "Total batch size for predict.")
 
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
 
-flags.DEFINE_float("num_train_epochs", 3.0,
+flags.DEFINE_integer("num_train_epochs", 3,
                    "Total number of training epochs to perform.")
 
 flags.DEFINE_float(
@@ -104,7 +110,7 @@ flags.DEFINE_float(
     "Proportion of training to perform linear learning rate warmup for. "
     "E.g., 0.1 = 10% of training.")
 
-flags.DEFINE_integer("save_checkpoints_steps", 500,
+flags.DEFINE_integer("save_checkpoints_steps", 1000,
                      "How often to save the model checkpoint.")
 
 flags.DEFINE_integer("iterations_per_loop", 1000,
@@ -207,14 +213,10 @@ class DataProcessor(object):
     raise NotImplementedError()
 
   @classmethod
-  def _read_tsv(cls, input_file, quotechar=None):
+  def _read_csv(cls, input_file):
     """Reads a tab separated value file."""
-    with tf.gfile.Open(input_file, "r") as f:
-      reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
-      lines = []
-      for line in reader:
-        lines.append(line)
-      return lines
+    df = pd.read_csv(input_file)
+    return df.values.tolist()
 
 class SemReProcessor(DataProcessor):
   """Processor for SemEval Re data set."""
@@ -222,39 +224,38 @@ class SemReProcessor(DataProcessor):
   def get_train_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+        self._read_csv(os.path.join(data_dir, "train.csv")), "train")
 
   def get_dev_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "dev")
+        self._read_csv(os.path.join(data_dir, "test.csv")), "dev")
 
   def get_test_examples(self, data_dir):
     """See base class."""
     return self._create_examples(
-        self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+        self._read_csv(os.path.join(data_dir, "test.csv")), "test")
 
   def get_labels(self):
     """See base class."""
-    return ['Other', 'Cause-Effect(e1,e2)', 'Cause-Effect(e2,e1)', 'Instrument-Agency(e1,e2)', 'Instrument-Agency(e2,e1)', 'Product-Producer(e1,e2)', 'Product-Producer(e2,e1)', 'Content-Container(e1,e2)', 'Content-Container(e2,e1)', 'Entity-Origin(e1,e2)', 'Entity-Origin(e2,e1)', 'Entity-Destination(e1,e2)', 'Entity-Destination(e2,e1)', 'Component-Whole(e1,e2)', 'Component-Whole(e2,e1)', 'Member-Collection(e1,e2)', 'Member-Collection(e2,e1)', 'Message-Topic(e1,e2)', 'Message-Topic(e2,e1)']
+    self.labels =  ['Other', 'Cause-Effect(e1,e2)', 'Cause-Effect(e2,e1)', 'Instrument-Agency(e1,e2)', 'Instrument-Agency(e2,e1)', 'Product-Producer(e1,e2)', 'Product-Producer(e2,e1)', 'Content-Container(e1,e2)', 'Content-Container(e2,e1)', 'Entity-Origin(e1,e2)', 'Entity-Origin(e2,e1)', 'Entity-Destination(e1,e2)', 'Entity-Destination(e2,e1)', 'Component-Whole(e1,e2)', 'Component-Whole(e2,e1)', 'Member-Collection(e1,e2)', 'Member-Collection(e2,e1)', 'Message-Topic(e1,e2)', 'Message-Topic(e2,e1)']
+    return self.labels
 
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
     examples = []
     for (i, line) in enumerate(lines):
-      if i == 0:
-        continue
       guid = "%s-%s" % (set_type, i)
       text_a = tokenization.convert_to_unicode(line[0])
       if set_type == "test":
-        label = "Other"
+        label = 0
       else:
-        label = tokenization.convert_to_unicode(line[1])
+        label = int(line[1])
       examples.append(
           InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
     return examples
 
-  def predict_output(self, results):
+  def predict_output(self, result):
     cnt = 8001
     output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
     with tf.gfile.GFile(output_predict_file, "w") as writer:
@@ -262,13 +263,10 @@ class SemReProcessor(DataProcessor):
       tf.logging.info("***** Predict results *****")
       for (i, prediction) in enumerate(result):
         probabilities = prediction["probabilities"]
-        print(probabilities)
         predict_relation = np.argmax(probabilities)
-        print(predict_relation)
-        output_line = "\t".join(
-            str(class_probability)
-            for class_probability in probabilities) + "\n"
+        output_line = "{}\t{}\n".format(cnt, self.labels[predict_relation])
         writer.write(output_line)
+        cnt += 1
 
 def convert_single_example(ex_index, example, label_list, max_seq_length,
                            tokenizer, task=None):
@@ -281,10 +279,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
         segment_ids=[0] * max_seq_length,
         label_id=0,
         is_real_example=False)
-
-  label_map = {}
-  for (i, label) in enumerate(label_list):
-    label_map[label] = i
 
   tokens_a = tokenizer.tokenize(example.text_a)
   tokens_b = None
@@ -323,15 +317,20 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
   tokens = []
   segment_ids = []
 
+  tokens.append("[CLS]")
+  segment_ids.append(0)
+
   if FLAGS.task_name == 'semre':
-    tokens.append("[CLS]")
-    segment_ids.append(0)
     for token in tokens_a:
       if token in retain:
-        if FLAGS.separate == 'no':
+        if FLAGS.entity_sep == 0:
           continue
-        elif FLAGS.separate == 'sep': 
-          tokens.append("[SEP]")
+        elif FLAGS.entity_sep == 1:
+          tokens.append(sep_replace[token][0])
+        elif FLAGS.entity_sep == 2:
+          tokens.append(sep_replace[token][1])
+        else:
+          tokens.append(sep_replace[token][2])
       else:
         tokens.append(token)
       segment_ids.append(0)
@@ -372,7 +371,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
   assert len(input_mask) == max_seq_length
   assert len(segment_ids) == max_seq_length
 
-  label_id = label_map[example.label]
+  label_id = example.label
   if ex_index < 5:
     tf.logging.info("*** Example ***")
     tf.logging.info("guid: %s" % (example.guid))
@@ -381,7 +380,7 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
     tf.logging.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
     tf.logging.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
     tf.logging.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-    tf.logging.info("label: %s (id = %d)" % (example.label, label_id))
+    tf.logging.info("label: %d (id = %d)" % (example.label, label_id))
 
   feature = InputFeatures(
       input_ids=input_ids,
@@ -754,7 +753,7 @@ def main(_):
   if FLAGS.do_train:
     train_examples = processor.get_train_examples(FLAGS.data_dir)
     num_train_steps = int(
-        len(train_examples) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
+        float(len(train_examples)) / FLAGS.train_batch_size * FLAGS.num_train_epochs)
     num_warmup_steps = int(num_train_steps * FLAGS.warmup_proportion)
 
   model_fn = model_fn_builder(
@@ -869,22 +868,7 @@ def main(_):
 
     result = estimator.predict(input_fn=predict_input_fn)
     processor.predict_output(result)
-    """
-    output_predict_file = os.path.join(FLAGS.output_dir, "test_results.tsv")
-    with tf.gfile.GFile(output_predict_file, "w") as writer:
-      num_written_lines = 0
-      tf.logging.info("***** Predict results *****")
-      for (i, prediction) in enumerate(result):
-        probabilities = prediction["probabilities"]
-        if i >= num_actual_predict_examples:
-          break
-        output_line = "\t".join(
-            str(class_probability)
-            for class_probability in probabilities) + "\n"
-        writer.write(output_line)
-        num_written_lines += 1
-    assert num_written_lines == num_actual_predict_examples
-    """
+    K.clear_session()
 
 if __name__ == "__main__":
   flags.mark_flag_as_required("data_dir")
@@ -893,5 +877,4 @@ if __name__ == "__main__":
   flags.mark_flag_as_required("bert_config_file")
   flags.mark_flag_as_required("output_dir")
   tf.app.run()
-  K.clear_session()
 
