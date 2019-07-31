@@ -37,8 +37,8 @@ session = tf.Session(config=cf)
 """
 
 retain = ['<e1>', '<e2>', '</e1>', '</e2>']
-sep_replace = {'<e1>' : ['$', '$', '$'], '</e1>' : ['$', '$', '%'], \
-              '<e2>' : ['$', '#', '#'], '</e2>' : ['$', '#', '&']}
+sep_replace = {'<e1>' : ['', '$', '$', '$'], '</e1>' : ['', '$', '$', '%'], \
+              '<e2>' : ['', '$', '#', '#'], '</e2>' : ['', '$', '#', '&']}
 
 
 flags = tf.flags
@@ -241,12 +241,17 @@ class SemReProcessor(DataProcessor):
     self.labels =  ['Other', 'Cause-Effect(e1,e2)', 'Cause-Effect(e2,e1)', 'Instrument-Agency(e1,e2)', 'Instrument-Agency(e2,e1)', 'Product-Producer(e1,e2)', 'Product-Producer(e2,e1)', 'Content-Container(e1,e2)', 'Content-Container(e2,e1)', 'Entity-Origin(e1,e2)', 'Entity-Origin(e2,e1)', 'Entity-Destination(e1,e2)', 'Entity-Destination(e2,e1)', 'Component-Whole(e1,e2)', 'Component-Whole(e2,e1)', 'Member-Collection(e1,e2)', 'Member-Collection(e2,e1)', 'Message-Topic(e1,e2)', 'Message-Topic(e2,e1)']
     return self.labels
 
+
   def _create_examples(self, lines, set_type):
     """Creates examples for the training and dev sets."""
+    def process_text(s):
+      for token in retain:
+        s = s.replace(token, sep_replace[token][FLAGS.entity_sep])
+      return s
     examples = []
     for (i, line) in enumerate(lines):
       guid = "%s-%s" % (set_type, i)
-      text_a = tokenization.convert_to_unicode(line[0])
+      text_a = tokenization.convert_to_unicode(process_text(line[0]))
       if set_type == "test":
         label = 0
       else:
@@ -319,28 +324,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
 
   tokens.append("[CLS]")
   segment_ids.append(0)
-
-  if FLAGS.task_name == 'semre':
-    for token in tokens_a:
-      if token in retain:
-        if FLAGS.entity_sep == 0:
-          continue
-        elif FLAGS.entity_sep == 1:
-          tokens.append(sep_replace[token][0])
-        elif FLAGS.entity_sep == 2:
-          tokens.append(sep_replace[token][1])
-        else:
-          tokens.append(sep_replace[token][2])
-      else:
-        tokens.append(token)
-      segment_ids.append(0)
-    tokens.append("[SEP]")
-    segment_ids.append(0)
-
-    
-  """
-  tokens.append("[CLS]")
-  segment_ids.append(0)
   for token in tokens_a:
     tokens.append(token)
     segment_ids.append(0)
@@ -353,7 +336,6 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
       segment_ids.append(1)
     tokens.append("[SEP]")
     segment_ids.append(1)
-  """
 
   input_ids = tokenizer.convert_tokens_to_ids(tokens)
 

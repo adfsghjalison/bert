@@ -7,7 +7,7 @@ python3 run_classifier.py \
   --task_name=$TASK \
   --do_train=true \
   --do_predict=true \
-  --entity_sep=4 \
+  --entity_sep=2 \
   --data_dir=$DATA_DIR/$TASK \
   --vocab_file=$BERT_BASE_DIR/vocab.txt \
   --bert_config_file=$BERT_BASE_DIR/bert_config.json \
