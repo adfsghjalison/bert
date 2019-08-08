@@ -1,5 +1,43 @@
 # BERT
 
+## Relation Extraction
+
+report result for SemEval-2010 Relation Extraction dataset:  
+
+Model | BERT | XLNET
+-----|-----|-----
+no separated| 0.814 | 0.803
+separated 1 | 0.879 | 0.895
+separated 2 | 0.884 | 0.893
+separated 4 | 0.885 | 0.893
+
+### result (translated to Chinese)  
+
+Model | BERT 
+-----|-----
+no separated| 0.683
+separated 1 | 0.742 
+separated 2 | 0.776 
+separated 4 | 0.782
+
+
+```
+  separated method :
+    for sentence :
+      A misty <e1> ridge </e1> uprises from the <e2> surge </e2> .
+
+  no separated : 
+      A misty ridge uprises from the surge .
+  separated 1 :  
+      A misty $ ridge $ uprises from the $ surge $ .
+  separated 2 :  
+      A misty $ ridge $ uprises from the # surge # .
+  separated 4 :  
+      A misty $ ridge % uprises from the # surge & .
+```
+
+
+
 **\*\*\*\*\* New May 31st, 2019: Whole Word Masking Models \*\*\*\*\***
 
 This is a release of several new models which were the result of an improvement

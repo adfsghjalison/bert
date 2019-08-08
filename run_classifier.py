@@ -248,10 +248,15 @@ class SemReProcessor(DataProcessor):
       for token in retain:
         s = s.replace(token, sep_replace[token][FLAGS.entity_sep])
       return s
+
     examples = []
     for (i, line) in enumerate(lines):
       guid = "%s-%s" % (set_type, i)
-      text_a = tokenization.convert_to_unicode(process_text(line[0]))
+     
+      if type(line[0]) != str:
+        text_a = ' '
+      else: 
+        text_a = tokenization.convert_to_unicode(process_text(line[0]))
       if set_type == "test":
         label = 0
       else:
@@ -681,7 +686,8 @@ def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = {
-      "semre": SemReProcessor
+      "semre": SemReProcessor, 
+      "semre_ch": SemReProcessor
   }
 
   tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
